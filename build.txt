@@ -1,0 +1,3 @@
+displayName = Death Chest
+author = Suvius
+version = 0.1
