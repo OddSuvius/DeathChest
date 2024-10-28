@@ -1,0 +1,38 @@
+Mods: {
+	DeathChest: {
+		Configs: {
+			Config: {
+				RejectClientChangesMessage: NOT A SERVER/HOST, changes denied.
+				DisplayName: Config
+				Headers.Options: Options
+
+				PublicDeathChests: {
+					Label: Public Death Chests
+					Tooltip: ""
+				}
+			}
+		}
+
+		NPCs: {
+			DeathChestNPC: {
+				DisplayName: Death Chest N P C
+
+				TownNPCMood: {
+					Content: I am content.
+					NoHome: I hate not having a home.
+					FarFromHome: I am too far from home.
+					LoveSpace: I love having so much space.
+					DislikeCrowded: I dislike how crowded I am.
+					HateCrowded: I hate how crowded I am.
+					LikeNPC_Princess: I like {NPCName}.
+					Princess_LovesNPC: I like {NPCName}.
+				}
+			}
+		}
+
+		UI: {
+			Title: Death Chest
+			LootAll: Loot All
+		}
+	}
+}
