@@ -8,7 +8,7 @@ Mods: {
 
 				PublicDeathChests: {
 					Label: Public Death Chests
-					Tooltip: ""
+					Tooltip: When enabled, all players can access each other's Death Chests
 				}
 			}
 		}

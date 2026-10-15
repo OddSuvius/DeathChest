@@ -14,8 +14,6 @@ namespace DeathChest
 
         [Header("Options")]
         [DefaultValue(false)]
-        [Label("Public Death Chests")]
-        [Tooltip("When enabled, all players can access each other's Death Chests")]
         public bool PublicDeathChests = true;
 
         public static LocalizedText RejectClientChangesMessage { get; private set; }

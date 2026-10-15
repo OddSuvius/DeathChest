@@ -11,11 +11,6 @@ using System.Linq;
 using DeathChest.Data;
 using Terraria.DataStructures;
 using System.Collections.Generic;
-using Humanizer;
-using Microsoft.CodeAnalysis.Simplification;
-using System.Drawing;
-using System.Numerics;
-using System.Threading.Channels;
 using Vector2 = Microsoft.Xna.Framework.Vector2;
 using Color = Microsoft.Xna.Framework.Color;
 
