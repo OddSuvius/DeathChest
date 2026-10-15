@@ -2,20 +2,20 @@ Mods: {
 	DeathChest: {
 		Configs: {
 			Config: {
-				RejectClientChangesMessage: NOT A SERVER/HOST, changes denied.
 				DisplayName: Config
 				Headers.Options: Options
 
-				PublicDeathChests: {
-					Label: Public Death Chests
-					Tooltip: When enabled, all players can access each other's Death Chests
+				PrivateDeathChests: {
+					Label: Private Death Chests
+					Tooltip: Only the character who died can see and open their Death Chest
 				}
 			}
 		}
 
 		NPCs: {
 			DeathChestNPC: {
-				DisplayName: Death Chest N P C
+				DisplayName: Death Chest
+				Hover: "{0}'s Death Chest (died {1})"
 
 				TownNPCMood: {
 					Content: I am content.
@@ -31,8 +31,17 @@ Mods: {
 		}
 
 		UI: {
-			Title: Death Chest
+			Title: "{0}'s Death Chest"
+			Died: Died {0}
 			LootAll: Loot All
+			NoAccess: This Death Chest belongs to {0}.
+		}
+
+		Items: {
+			ZZTempSecretItem: {
+				DisplayName: Z Z Temp Secret Item
+				Tooltip: ""
+			}
 		}
 	}
 }

@@ -1,270 +1,101 @@
-﻿using MonoMod.Cil;
-using Mono.Cecil.Cil;
-using System;
-using Terraria;
-using Terraria.ModLoader;
-using Terraria.ID;
-using DeathChest.NPCs;
-using DeathChest.UI;
-using Microsoft.Xna.Framework;
-using System.Linq;
-using DeathChest.Data;
-using Terraria.DataStructures;
 using System.Collections.Generic;
-using Vector2 = Microsoft.Xna.Framework.Vector2;
-using Color = Microsoft.Xna.Framework.Color;
+using DeathChest.NPCs;
+using MonoMod.Cil;
+using Terraria;
+using Terraria.DataStructures;
+using Terraria.ID;
+using Terraria.ModLoader;
 
 namespace DeathChest
 {
-    public static class ILEdits
-    {
-        private static readonly int[] StarterItems =
-[
-            ItemID.CopperShortsword,
-            ItemID.CopperPickaxe,
-            ItemID.CopperAxe,
-];
-        private static bool IsStarterItem(Item item)
-        {
-            return Array.IndexOf(StarterItems, item.type) != -1 && item.stack == 1;
-        }
-        public static void ApplyILEdits()
-        {
-            IL_Main.HoverOverNPCs += HookHoverOverNPCs;
-            IL_Player.KillMe += ModifyItemDrop;
-        }
+	// Every death drops like mediumcore, and everything the death drops goes into a Death Chest instead of onto the ground.
+	// What vanilla mediumcore doesn't drop stays vanilla: the starter kit (copper tools) is kept and handed out as usual,
+	// and the trash slot is cleared.
+	public static class ILEdits
+	{
+		// Set only while Player.KillMe runs for the local player.
+		private static List<Item> _collected;
+		private static Player _dying;
 
-        private static void HookHoverOverNPCs(ILContext il)
-        {
-            try
-            {
-                var cursor = new ILCursor(il);
+		public static void ApplyILEdits()
+		{
+			IL_Player.KillMe += ClassicDropsLikeMediumcore;
+			On_Player.KillMe += CollectDeathDrops;
+			On_Player.TryDroppingSingleItem += StoreInsteadOfDropping;
+			On_Item.NewItem_Inner += CatchOtherDeathDrops;
+		}
 
-                if (!cursor.TryGotoNext(MoveType.Before,
-                    i => i.MatchLdloc(2),
-                    i => i.MatchCallvirt("Terraria.NPC", "GetChat"),
-                    i => i.MatchStsfld<Main>("npcChatText")))
-                    return;
+		// Player.KillMe, inside `if (Main.myPlayer == whoAmI)`:
+		//   trashItem.SetDefaults();                    .ilmap C# 35185, IL_012c ldfld trashItem .. IL_0133 callvirt Item::SetDefaults  <- insert after
+		//   if (difficulty == 0 || difficulty == 3) { only large gems drop }
+		//   else if (difficulty == 1) DropItems(); else if (difficulty == 2) { DropItems(); KillMeForGood(); }
+		// Classic and Journey run DropItems here too; the vanilla classic branch then finds nothing left to drop,
+		// and the later DropCoins finds no coins.
+		private static void ClassicDropsLikeMediumcore(ILContext il)
+		{
+			var c = new ILCursor(il);
+			if (!c.TryGotoNext(i => i.MatchLdfld<Player>("trashItem")) ||
+				!c.TryGotoNext(MoveType.After, i => i.MatchCallOrCallvirt<Item>("SetDefaults")))
+				throw new ILPatchFailureException(ModContent.GetInstance<DeathChest>(), il, null);
 
-                var normalNpcLabel = cursor.DefineLabel();
+			c.EmitLdarg0();
+			c.EmitDelegate(static (Player player) => {
+				if (player.difficulty is PlayerDifficultyID.SoftCore or PlayerDifficultyID.Creative)
+					player.DropItems();
+			});
+		}
 
-                cursor.Emit(OpCodes.Ldloc_2);  // Load NPC instance
-                cursor.EmitDelegate<Func<NPC, bool>>(npc =>
-                {
-                    if (npc.type != ModContent.NPCType<DeathChestNPC>())
-                        return false;
+		// Collect for the whole death, so items other mods drop in their own death code (ModPlayer.Kill, their own
+		// DropItems detours, extra inventories) land in the chest as well.
+		private static void CollectDeathDrops(On_Player.orig_KillMe orig, Player self, PlayerDeathReason damageSource, double dmg, int hitDirection, bool pvp)
+		{
+			if (self.whoAmI != Main.myPlayer || _collected != null) {
+				orig(self, damageSource, dmg, hitDirection, pvp);
+				return;
+			}
+			var items = _collected = new List<Item>();
+			_dying = self;
+			bool wasDead = self.dead;
+			// The cursor item reaches DropItems only through inventory[58], which vanilla refreshes from Main.mouseItem once
+			// per frame (Player.dropItemCheck). Dying before that refresh would delete the cursor item (DropItems_End clears
+			// the cursor). Refresh it now, as vanilla would have.
+			if (!wasDead)
+				self.inventory[58] = Main.mouseItem.Clone();
+			try {
+				orig(self, damageSource, dmg, hitDirection, pvp);
+			}
+			finally {
+				_collected = null;
+				_dying = null;
+			}
+			if (items.Count > 0)
+				DeathChestNPC.SpawnFor(self, items);
+		}
 
-                    var player = Main.LocalPlayer;
-                    var modPlayer = player.GetModPlayer<DeathChestPlayer>();
+		// Vanilla's drop path (inventory, armor, dyes, equipment, loadouts, ModAccessorySlot slots): never spawn the item.
+		private static void StoreInsteadOfDropping(On_Player.orig_TryDroppingSingleItem orig, Player self, IEntitySource source, Item theItem)
+		{
+			if (_collected == null || self != _dying) {
+				orig(self, source, theItem);
+				return;
+			}
+			if (theItem.stack > 0)
+				_collected.Add(theItem.Clone());
+			theItem.TurnToAir(fullReset: true);
+		}
 
-                    if (Main.mouseRight)
-                    {
-                        if (npc.ModNPC is DeathChestNPC deathChest)
-                        {
-                            // Request access
-                            if (Main.netMode == NetmodeID.MultiplayerClient)
-                            {
-                                PacketHandler.SendOpenRequest(npc.whoAmI);
-                            }
-                            else
-                            {
-                                modPlayer.OpenChest(npc.whoAmI);
-                            }
-
-                            Main.mouseRight = false;
-                            Main.mouseRightRelease = false;
-                        }
-                    }
-
-                    return true;
-                });
-
-                cursor.Emit(OpCodes.Brfalse, normalNpcLabel);
-                cursor.Emit(OpCodes.Ret);
-                cursor.MarkLabel(normalNpcLabel);
-            }
-            catch (Exception e)
-            {
-                Logging.PublicLogger.Error($"[Death Chest] Error in IL edit: {e}");
-                MonoModHooks.DumpIL(ModContent.GetInstance<DeathChest>(), il);
-            }
-        }
-
-
-        private static void ModifyItemDrop(ILContext il)
-        {
-            try
-            {
-                var c = new ILCursor(il);
-
-                // Find the myPlayer check followed by the inventory check sequence
-                if (!c.TryGotoNext(MoveType.Before,
-                    i => i.MatchLdsfld<Main>("myPlayer"),
-                    i => i.MatchLdarg(0),
-                    i => i.MatchLdfld<Entity>("whoAmI"),
-                    i => i.MatchBneUn(out _)))
-                {
-                    Logging.PublicLogger.Error("[Death Chest] Could not find first myPlayer check - patch failed");
-                    return;
-                }
-
-                // Move to the start of the item dropping code block
-                if (!c.TryGotoNext(MoveType.Before,
-                    i => i.MatchLdarg(0),
-                    i => i.MatchLdfld<Player>("trashItem")))
-                {
-                    Logging.PublicLogger.Error("[Death Chest] Could not find trashItem access - patch failed");
-                    return;
-                }
-
-                var jumpStart = c.Index;
-
-                if (!c.TryGotoNext(MoveType.Before,
-                    i => i.MatchLdloc(0),
-                    i => i.MatchBrfalse(out _)))
-                {
-                    Logging.PublicLogger.Error("[Death Chest] Could not find end of item drop code - patch failed");
-                    return;
-                }
-
-                var afterItemDropping = c.MarkLabel();
-                c.Index = jumpStart;
-
-                c.Emit(OpCodes.Ldarg_0); // Load Player instance
-                c.EmitDelegate<Action<Player>>(player =>
-                {
-                    if (Main.myPlayer != player.whoAmI)
-                        return;
-
-                    try
-                    {
-                        var items = new List<Item>();
-
-                        // Handle all inventory arrays
-                        for (int i = 0; i < player.inventory.Length; i++)
-                        {
-                            if (player.inventory[i].stack > 0 && !IsStarterItem(player.inventory[i]))
-                            {
-                                items.Add(player.inventory[i].Clone());
-                            }
-                        }
-
-                        // Handle armor
-                        for (int i = 0; i < player.armor.Length; i++)
-                        {
-                            if (!player.armor[i].IsAir)
-                            {
-                                items.Add(player.armor[i].Clone());
-                            }
-                        }
-
-                        // Handle dyes
-                        for (int i = 0; i < player.dye.Length; i++)
-                        {
-                            if (!player.dye[i].IsAir)
-                            {
-                                items.Add(player.dye[i].Clone());
-                            }
-                        }
-
-                        // Handle misc equipment
-                        for (int i = 0; i < player.miscEquips.Length; i++)
-                        {
-                            if (!player.miscEquips[i].IsAir)
-                            {
-                                items.Add(player.miscEquips[i].Clone());
-                            }
-                        }
-
-                        // Handle misc dyes
-                        for (int i = 0; i < player.miscDyes.Length; i++)
-                        {
-                            if (!player.miscDyes[i].IsAir)
-                            {
-                                items.Add(player.miscDyes[i].Clone());
-                            }
-                        }
-
-                        // Only spawn chest if there are items to store
-                        if (items.Count > 0)
-                        {
-                            Vector2 spawnPos = player.position + new Vector2(32f, -32f);
-
-                            if (Main.netMode == NetmodeID.MultiplayerClient)
-                            {
-                                PacketHandler.SendNewDeathChest(spawnPos, items.ToArray(),
-                                    player.GetModPlayer<DeathChestPlayer>().PlayerGUID);
-                                Main.NewText("Death Chest spawn requested...", Color.Yellow);
-                                ClearAllItems(player);
-                            }
-                            else
-                            {
-                                int npcId = NPC.NewNPC(new EntitySource_SpawnNPC(), (int)spawnPos.X, (int)spawnPos.Y,
-                                    ModContent.NPCType<DeathChestNPC>());
-
-                                if (npcId != -1)
-                                {
-                                    DeathChestManager.RegisterChest(npcId,
-                                        new DeathChestData(items.ToArray(), player.GetModPlayer<DeathChestPlayer>().PlayerGUID));
-                                    ClearAllItems(player);
-                                    Main.NewText("Death Chest spawned with your items", Color.Yellow);
-                                }
-                                else
-                                {
-                                    Main.NewText("Failed to spawn Death Chest", Color.Red);
-                                    Logging.PublicLogger.Error("[Death Chest] Failed to spawn NPC");
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logging.PublicLogger.Error($"[Death Chest] Error spawning Death Chest: {ex}");
-                    }
-                });
-
-                c.Emit(OpCodes.Br, afterItemDropping);
-                Logging.PublicLogger.Info("[Death Chest] Successfully patched KillMe to use Death Chests");
-            }
-            catch (Exception ex)
-            {
-                Logging.PublicLogger.Error($"[Death Chest] Error patching KillMe: {ex}");
-                MonoModHooks.DumpIL(ModContent.GetInstance<DeathChest>(), il);
-            }
-        }
-
-        private static void ClearAllItems(Player player)
-        {
-            // Clear main inventory
-            for (int i = 0; i < player.inventory.Length; i++)
-            {
-                if (!IsStarterItem(player.inventory[i]))
-                    player.inventory[i].TurnToAir(false);
-            }
-
-            // Clear armor
-            for (int i = 0; i < player.armor.Length; i++)
-            {
-                    player.armor[i].TurnToAir(false);
-            }
-
-            // Clear dyes
-            for (int i = 0; i < player.dye.Length; i++)
-            {
-                    player.dye[i].TurnToAir(false);
-            }
-
-            // Clear misc equipment
-            for (int i = 0; i < player.miscEquips.Length; i++)
-            {
-                    player.miscEquips[i].TurnToAir(false);
-            }
-
-            // Clear misc dyes
-            for (int i = 0; i < player.miscDyes.Length; i++)
-            {
-                    player.miscDyes[i].TurnToAir(false);
-            }
-        }
-    }
+		// Any other item spawned from the dying player's death. On a client, a new item is local until its caller
+		// sends it, so emptying it here means the server never creates it.
+		private static int CatchOtherDeathDrops(On_Item.orig_NewItem_Inner orig, IEntitySource source, int X, int Y, int Width, int Height,
+			Item itemToClone, int Type, int Stack, bool noBroadcast, int pfix, bool noGrabDelay, bool reverseLookup)
+		{
+			int i = orig(source, X, Y, Width, Height, itemToClone, Type, Stack, noBroadcast, pfix, noGrabDelay, reverseLookup);
+			if (_collected != null && source is EntitySource_Death death && death.Entity == _dying && i >= 0 && i < Main.item.Length && !Main.item[i].IsAir) {
+				_collected.Add(Main.item[i].Clone());
+				Main.item[i].TurnToAir(fullReset: true);
+				Main.item[i].active = false;
+			}
+			return i;
+		}
+	}
 }
