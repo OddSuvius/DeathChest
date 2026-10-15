@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using DeathChest.NPCs;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -28,8 +27,8 @@ namespace DeathChest.UI
 
 		private int _scrollRow;
 		private bool _draggingScrollbar;
-		private float _lootAllScale = 0.75f;
-		private bool _lootAllHovered;
+		private float _lootAllScale = 0.75f, _equipScale = 0.75f;
+		private bool _lootAllHovered, _equipHovered;
 
 		public void Reset() => _scrollRow = 0;
 
@@ -81,6 +80,8 @@ namespace DeathChest.UI
 			DrawText(spriteBatch, Language.GetTextValue("Mods.DeathChest.UI.Died", chest.DeathTimeText), new Vector2(TextX, top + 24), 0.8f, Color.LightGray);
 			if (Button(spriteBatch, Language.GetTextValue("Mods.DeathChest.UI.LootAll"), (int)TextX, top + 60, ref _lootAllScale, ref _lootAllHovered))
 				LootAll(chest);
+			if (Button(spriteBatch, Language.GetTextValue("Mods.DeathChest.UI.Equip"), (int)TextX, top + 86, ref _equipScale, ref _equipHovered))
+				TryToEquip(chest);
 		}
 
 		// Drag or click the track to scroll; the thumb's size shows how much of the chest is visible.
@@ -110,7 +111,7 @@ namespace DeathChest.UI
 		}
 
 		// Moves as much as fits into the inventory; the rest stays in the chest.
-		public static void LootAll(DeathChestNPC chest)
+		public static void LootAll(DeathChestData chest)
 		{
 			var space = new InventorySpace(Main.LocalPlayer);
 			bool any = false;
@@ -125,24 +126,41 @@ namespace DeathChest.UI
 				SoundEngine.PlaySound(SoundID.Grab);
 		}
 
+		// Puts every item that was equipped at death back into its slot (armor, accessories, vanity, dyes, equipment,
+		// other loadouts, modded accessory slots), where that slot is empty and would accept it. The rest stays.
+		public static void TryToEquip(DeathChestData chest)
+		{
+			var player = Main.LocalPlayer;
+			bool any = false;
+			for (int i = 0; i < chest.Items.Count; i++) {
+				string origin = chest.OriginAt(i);
+				if (origin != null && Equipment.CanPlace(player, origin, chest.Items[i])) {
+					RequestTake(chest, i, chest.Items[i].stack, toMouse: false, equipTo: origin);
+					any = true;
+				}
+			}
+			if (any)
+				SoundEngine.PlaySound(SoundID.Grab);
+		}
+
 		// Single player: move the items right away. Multiplayer: ask the server, which sends them (PacketHandler).
-		private static void RequestTake(DeathChestNPC chest, int slot, int count, bool toMouse)
+		private static void RequestTake(DeathChestData chest, int slot, int count, bool toMouse, string equipTo = null)
 		{
 			var me = Main.LocalPlayer.GetModPlayer<DeathChestPlayer>();
 			if (Main.netMode == NetmodeID.MultiplayerClient) {
 				me.Outstanding++;
-				PacketHandler.SendTake(chest.ChestId, slot, count, toMouse);
+				PacketHandler.SendTake(chest.Id, slot, count, toMouse, equipTo);
 				return;
 			}
-			me.Receive(new[] { ChestOps.Take(chest.Items, slot, count) }, toMouse);
+			me.Receive(new[] { ChestOps.Take(chest.Items, slot, count) }, toMouse, equipTo);
 			if (chest.IsEmpty)
-				chest.Remove();
+				ChestWorld.Remove(chest);
 		}
 
 		// Take-only: items come out of a Death Chest, nothing goes in.
 		// Left click: take the stack onto the empty cursor; shift-click: move to inventory; right click: take one.
 		// Returns true if a take was made (or requested).
-		internal static bool HandleSlot(DeathChestNPC chest, int slot, bool left, bool right, bool shift)
+		internal static bool HandleSlot(DeathChestData chest, int slot, bool left, bool right, bool shift)
 		{
 			Item item = chest.Items[slot];
 			if (item.IsAir)

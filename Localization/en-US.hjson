@@ -12,36 +12,12 @@ Mods: {
 			}
 		}
 
-		NPCs: {
-			DeathChestNPC: {
-				DisplayName: Death Chest
-				Hover: "{0}'s Death Chest (died {1})"
-
-				TownNPCMood: {
-					Content: I am content.
-					NoHome: I hate not having a home.
-					FarFromHome: I am too far from home.
-					LoveSpace: I love having so much space.
-					DislikeCrowded: I dislike how crowded I am.
-					HateCrowded: I hate how crowded I am.
-					LikeNPC_Princess: I like {NPCName}.
-					Princess_LovesNPC: I like {NPCName}.
-				}
-			}
-		}
-
 		UI: {
 			Title: "{0}'s Death Chest"
+			Hover: "{0}'s Death Chest (died {1})"
 			Died: Died {0}
 			LootAll: Loot All
-			NoAccess: This Death Chest belongs to {0}.
-		}
-
-		Items: {
-			ZZTempSecretItem: {
-				DisplayName: Z Z Temp Secret Item
-				Tooltip: ""
-			}
+			Equip: Try to Equip
 		}
 	}
 }

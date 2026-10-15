@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using DeathChest.NPCs;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.ID;
@@ -34,6 +33,9 @@ namespace DeathChest
 			Grant,        // server -> client: items for you (txn)
 			Ack,          // server -> client: death txn applied
 			OpDone,       // server -> client: your Take has been handled
+			ChestList,    // server -> client, split, on entering the world: every chest's header (id, position, owner, time)
+			ChestAdded,   // server -> all clients: a new chest's header
+			ChestRemoved, // server -> all clients: this chest is gone
 		}
 
 		// A ModPacket holds at most 65535 bytes, so item lists are split into packets of at most this many bytes of items.
@@ -45,8 +47,9 @@ namespace DeathChest
 		private const float ServerRange = DeathChestPlayer.Range * 2;
 
 		// Parts received so far: server, per sending player; client, the chest being opened.
-		private static readonly Dictionary<int, (long txn, Vector2 bottom, List<Item> items)> _deathParts = new();
+		private static readonly Dictionary<int, (long txn, Vector2 bottom, List<Item> items, List<string> origins)> _deathParts = new();
 		private static readonly List<Item> _openParts = new();
+		private static readonly List<string> _openOrigins = new();
 
 		// Client: one open request at a time. The server ignores refused requests (like vanilla chests), so a request
 		// with no answer expires after two seconds.
@@ -66,6 +69,16 @@ namespace DeathChest
 		// exactly what a world or player file keeps. A mod's NetSend is meant for display sync and often leaves data out.
 		private static void WriteItem(BinaryWriter w, Item item) => TagIO.Write(ItemIO.Save(item), w);
 		private static Item ReadItem(BinaryReader reader) => ItemIO.Load(TagIO.Read(reader));
+
+		// An item with the equipment slot it came from (Equipment), "" for none.
+		private static byte[] ItemWithOrigin(Item item, string origin)
+		{
+			var ms = new MemoryStream();
+			var w = new BinaryWriter(ms);
+			w.Write(origin ?? "");
+			WriteItem(w, item);
+			return ms.ToArray();
+		}
 
 		private static byte[] ItemBytes(Item item, int slot = -1)
 		{
@@ -97,25 +110,33 @@ namespace DeathChest
 			} while (i < entries.Count);
 		}
 
-		private static List<Item> ReadItems(BinaryReader reader, out int start, out bool last)
+		// One part of a split list of items with origins.
+		private static (List<Item> items, List<string> origins) ReadItemsWithOrigins(BinaryReader reader, out int start, out bool last)
 		{
 			start = reader.ReadInt32();
 			last = reader.ReadBoolean();
 			int n = reader.ReadUInt16();
 			var items = new List<Item>(n);
-			for (int i = 0; i < n; i++)
+			var origins = new List<string>(n);
+			for (int i = 0; i < n; i++) {
+				string origin = reader.ReadString();
+				origins.Add(origin == "" ? null : origin);
 				items.Add(ReadItem(reader));
-			return items;
+			}
+			return (items, origins);
 		}
 
 		// Adds a part to what was received so far. False if a part is missing.
-		private static bool Append(List<Item> sofar, List<Item> part, int start)
+		private static bool Append(List<Item> sofar, List<string> sofarOrigins, (List<Item> items, List<string> origins) part, int start)
 		{
-			if (start == 0)
+			if (start == 0) {
 				sofar.Clear();
+				sofarOrigins.Clear();
+			}
 			if (start != sofar.Count)
 				return false;
-			sofar.AddRange(part);
+			sofar.AddRange(part.items);
+			sofarOrigins.AddRange(part.origins);
 			return true;
 		}
 
@@ -136,26 +157,54 @@ namespace DeathChest
 		}
 
 		public static void SendOp(PendingOp op) =>
-			SendSplit(MessageType.Death, p => { p.Write(op.Txn); p.WriteVector2(op.Bottom); }, op.Items.ConvertAll(i => ItemBytes(i)));
+			SendSplit(MessageType.Death, p => { p.Write(op.Txn); p.WriteVector2(op.Bottom); },
+				op.Items.Select((item, i) => ItemWithOrigin(item, i < op.Origins.Count ? op.Origins[i] : null)).ToList());
 
-		public static void SendTake(Guid chest, int slot, int count, bool toMouse)
+		public static void SendTake(Guid chest, int slot, int count, bool toMouse, string equipTo)
 		{
 			var p = Packet(MessageType.Take);
 			p.Write(chest.ToByteArray());
 			p.Write(slot);
 			p.Write(count);
 			p.Write(toMouse);
+			p.Write(equipTo ?? "");
 			p.Send();
 		}
 
-		public static void SendOpenRequest(int npcId)
+		public static void SendOpenRequest(Guid chestId)
 		{
 			if (_openPending && Main.GameUpdateCount - _openRequestedAt < 120)
 				return;
 			_openPending = true;
 			_openRequestedAt = Main.GameUpdateCount;
 			var p = Packet(MessageType.RequestOpen);
-			p.Write((short)npcId);
+			p.Write(chestId.ToByteArray());
+			p.Send();
+		}
+
+		// ---- server -> clients: which chests exist (headers only; items travel only to the player who opens one) ----
+
+		private static byte[] HeaderBytes(DeathChestData chest)
+		{
+			var ms = new MemoryStream();
+			chest.WriteHeader(new BinaryWriter(ms));
+			return ms.ToArray();
+		}
+
+		private static void SendChestList(int toClient) =>
+			SendSplit(MessageType.ChestList, _ => { }, ChestWorld.Chests.ConvertAll(HeaderBytes), toClient);
+
+		public static void BroadcastChestAdded(DeathChestData chest)
+		{
+			var p = Packet(MessageType.ChestAdded);
+			chest.WriteHeader(p);
+			p.Send();
+		}
+
+		public static void BroadcastChestRemoved(Guid chestId)
+		{
+			var p = Packet(MessageType.ChestRemoved);
+			p.Write(chestId.ToByteArray());
 			p.Send();
 		}
 
@@ -170,12 +219,12 @@ namespace DeathChest
 		private static Journal.Record RecordOf(int whoAmI) => Journal.For(Main.player[whoAmI].GetModPlayer<DeathChestPlayer>().CharacterId);
 
 		// Items leaving a chest for a player: written to the journal first, then sent.
-		private static void Give(int whoAmI, Item item, bool toMouse)
+		private static void Give(int whoAmI, Item item, bool toMouse, string equipTo)
 		{
 			if (item.IsAir)
 				return;
 			var rec = RecordOf(whoAmI);
-			var grant = new Journal.Grant { Txn = rec.NextGrant++, ToMouse = toMouse, Items = new List<Item> { item } };
+			var grant = new Journal.Grant { Txn = rec.NextGrant++, ToMouse = toMouse, EquipTo = equipTo, Items = new List<Item> { item } };
 			rec.Grants.Add(grant);
 			SendGrant(whoAmI, grant);
 		}
@@ -185,17 +234,18 @@ namespace DeathChest
 			var p = Packet(MessageType.Grant);
 			p.Write(grant.Txn);
 			p.Write(grant.ToMouse);
+			p.Write(grant.EquipTo ?? "");
 			p.Write((ushort)grant.Items.Count);
 			foreach (var item in grant.Items)
 				WriteItem(p, item);
 			p.Send(toClient);
 		}
 
-		private static void SendChestUpdate(int toClient, DeathChestNPC chest, IEnumerable<int> slots)
+		private static void SendChestUpdate(int toClient, DeathChestData chest, IEnumerable<int> slots)
 		{
 			var list = slots.Where(s => s >= 0 && s < chest.Items.Count).Distinct().ToList();
 			if (list.Count > 0)
-				SendSplit(MessageType.ChestUpdate, p => p.Write(chest.ChestId.ToByteArray()), list.ConvertAll(s => ItemBytes(chest.Items[s], s)), toClient);
+				SendSplit(MessageType.ChestUpdate, p => p.Write(chest.Id.ToByteArray()), list.ConvertAll(s => ItemBytes(chest.Items[s], s)), toClient);
 		}
 
 		private static void Reply(MessageType type, int toClient, long txn = 0)
@@ -205,21 +255,30 @@ namespace DeathChest
 			p.Send(toClient);
 		}
 
-		private static void HandleTake(int whoAmI, Guid chestId, int slot, int count, bool toMouse)
+		private static void HandleTake(int whoAmI, Guid chestId, int slot, int count, bool toMouse, string equipTo)
 		{
-			var chest = DeathChestNPC.Find(chestId);
+			var chest = ChestWorld.Find(chestId);
 			// Only the player the server let open this chest takes from it.
-			if (chest != null && Main.player[whoAmI].GetModPlayer<DeathChestPlayer>().OpenChestId == chest.NPC.whoAmI) {
+			if (chest != null && Main.player[whoAmI].GetModPlayer<DeathChestPlayer>().OpenChestId == chest.Id) {
 				Item taken = ChestOps.Take(chest.Items, slot, count);
-				Give(whoAmI, taken, toMouse);
+				Give(whoAmI, taken, toMouse, equipTo);
 				SendChestUpdate(whoAmI, chest, new[] { slot });
 				if (chest.IsEmpty)
-					chest.Remove();
+					ChestWorld.Remove(chest);
 			}
 		}
 
-		private static DeathChestNPC ChestAt(int npcId) =>
-			npcId >= 0 && npcId < Main.maxNPCs && Main.npc[npcId].active ? Main.npc[npcId].ModNPC as DeathChestNPC : null;
+		// Client: a chest header arrived. Replace a known one (keeping items received by opening it) or add it.
+		private static void AddOrReplace(DeathChestData header)
+		{
+			var known = ChestWorld.Find(header.Id);
+			if (known != null) {
+				header.Items = known.Items;
+				header.Origins = known.Origins;
+				ChestWorld.Chests.Remove(known);
+			}
+			ChestWorld.Chests.Add(header);
+		}
 
 		public static void HandlePacket(BinaryReader reader, int whoAmI)
 		{
@@ -239,30 +298,33 @@ namespace DeathChest
 					rec.Grants.RemoveAll(g => g.Txn <= lastReceived);
 					foreach (var g in rec.Grants)
 						SendGrant(whoAmI, g);
+					SendChestList(whoAmI);
 					break;
 				}
 				case MessageType.Death: {
 					long txn = reader.ReadInt64();
 					var bottom = reader.ReadVector2();
-					var part = ReadItems(reader, out int start, out bool last);
+					var part = ReadItemsWithOrigins(reader, out int start, out bool last);
 					if (!server)
 						break;
-					var sofar = _deathParts.TryGetValue(whoAmI, out var s) && s.txn == txn ? s.items : new List<Item>();
-					if (!Append(sofar, part, start)) {
+					bool continuing = _deathParts.TryGetValue(whoAmI, out var s) && s.txn == txn;
+					var sofar = continuing ? s.items : new List<Item>();
+					var sofarOrigins = continuing ? s.origins : new List<string>();
+					if (!Append(sofar, sofarOrigins, part, start)) {
 						// Can't happen over one ordered connection. Drop it: the client keeps the death and resends it whole.
 						Mod.Logger.Error($"Death items from player {whoAmI} arrived out of order (part at {start}, have {sofar.Count}); waiting for a resend");
 						_deathParts.Remove(whoAmI);
 						break;
 					}
 					if (!last) {
-						_deathParts[whoAmI] = (txn, bottom, sofar);
+						_deathParts[whoAmI] = (txn, bottom, sofar, sofarOrigins);
 						break;
 					}
 					_deathParts.Remove(whoAmI);
 					var rec = RecordOf(whoAmI);
 					if (txn > rec.LastTxn) {
 						rec.LastTxn = txn;
-						DeathChestNPC.Spawn(bottom, sofar, Main.player[whoAmI]); // owner is whoever sent it, not what the packet claims
+						ChestWorld.Spawn(bottom, sofar, sofarOrigins, Main.player[whoAmI]); // owner is whoever sent it, not what the packet claims
 					}
 					Reply(MessageType.Ack, whoAmI, txn);
 					break;
@@ -272,8 +334,9 @@ namespace DeathChest
 					int slot = reader.ReadInt32();
 					int count = reader.ReadInt32();
 					bool toMouse = reader.ReadBoolean();
+					string equipTo = reader.ReadString();
 					if (server) {
-						HandleTake(whoAmI, chestId, slot, count, toMouse);
+						HandleTake(whoAmI, chestId, slot, count, toMouse, equipTo == "" ? null : equipTo);
 						Reply(MessageType.OpDone, whoAmI);
 					}
 					break;
@@ -285,47 +348,49 @@ namespace DeathChest
 					break;
 				}
 				case MessageType.RequestOpen: {
-					int npcId = reader.ReadInt16();
-					var chest = ChestAt(npcId);
+					var chestId = new Guid(reader.ReadBytes(16));
+					var chest = ChestWorld.Find(chestId);
 					var player = Main.player[whoAmI];
-					if (!server || chest == null || player.Distance(chest.NPC.Center) > ServerRange || !chest.CanAccess(player))
+					if (!server || chest == null || player.Distance(chest.Center) > ServerRange || !chest.CanAccess(player))
 						break;
 					// Like vanilla chests: one player at a time, and a request for a chest in use is ignored.
-					int user = DeathChestPlayer.UsingChest(npcId);
+					int user = DeathChestPlayer.UsingChest(chestId);
 					if (user != -1 && user != whoAmI)
 						break;
-					player.GetModPlayer<DeathChestPlayer>().OpenChestId = npcId;
-					SendSplit(MessageType.OpenItems, p => p.Write((short)npcId), chest.Items.ConvertAll(i => ItemBytes(i)), whoAmI);
+					player.GetModPlayer<DeathChestPlayer>().OpenChestId = chestId;
+					SendSplit(MessageType.OpenItems, p => p.Write(chestId.ToByteArray()), chest.Items.Select((item, i) => ItemWithOrigin(item, chest.OriginAt(i))).ToList(), whoAmI);
 					break;
 				}
 				case MessageType.Close:
 					if (server)
-						Main.player[whoAmI].GetModPlayer<DeathChestPlayer>().OpenChestId = -1;
+						Main.player[whoAmI].GetModPlayer<DeathChestPlayer>().OpenChestId = Guid.Empty;
 					break;
 
 				// ---- client ----
 				case MessageType.OpenItems: {
-					int npcId = reader.ReadInt16();
-					var part = ReadItems(reader, out int start, out bool last);
-					bool complete = Append(_openParts, part, start);
+					var chestId = new Guid(reader.ReadBytes(16));
+					var part = ReadItemsWithOrigins(reader, out int start, out bool last);
+					bool complete = Append(_openParts, _openOrigins, part, start);
 					if (complete && !last)
 						break;
 					_openPending = false;
-					var chest = ChestAt(npcId);
+					var chest = ChestWorld.Find(chestId);
 					if (complete && chest != null) {
 						chest.Items = new List<Item>(_openParts);
-						Main.LocalPlayer.GetModPlayer<DeathChestPlayer>().Open(npcId);
+						chest.Origins = new List<string>(_openOrigins);
+						Main.LocalPlayer.GetModPlayer<DeathChestPlayer>().Open(chestId);
 					}
 					else {
 						// Incomplete list or no such chest here: don't show it, and release the server's lock.
-						Mod.Logger.Warn($"Not opening chest {npcId}: complete={complete} present={chest != null}");
+						Mod.Logger.Warn($"Not opening chest {chestId}: complete={complete} present={chest != null}");
 						SendClose();
 					}
 					_openParts.Clear();
+					_openOrigins.Clear();
 					break;
 				}
 				case MessageType.ChestUpdate: {
-					var chest = DeathChestNPC.Find(new Guid(reader.ReadBytes(16)));
+					var chest = ChestWorld.Find(new Guid(reader.ReadBytes(16)));
 					reader.ReadInt32();
 					reader.ReadBoolean();
 					int n = reader.ReadUInt16();
@@ -343,6 +408,7 @@ namespace DeathChest
 				case MessageType.Grant: {
 					long txn = reader.ReadInt64();
 					bool toMouse = reader.ReadBoolean();
+					string equipTo = reader.ReadString();
 					int n = reader.ReadUInt16();
 					var items = new List<Item>(n);
 					for (int i = 0; i < n; i++)
@@ -350,7 +416,7 @@ namespace DeathChest
 					var me = Main.LocalPlayer.GetModPlayer<DeathChestPlayer>();
 					var world = DeathChestPlayer.WorldId;
 					if (txn > me.LastGrant.GetValueOrDefault(world)) {
-						me.Receive(items, toMouse);
+						me.Receive(items, toMouse, equipTo == "" ? null : equipTo);
 						me.LastGrant[world] = txn;
 					}
 					var p = Packet(MessageType.GrantAck);
@@ -362,6 +428,25 @@ namespace DeathChest
 					long txn = reader.ReadInt64();
 					var me = Main.LocalPlayer.GetModPlayer<DeathChestPlayer>();
 					me.Pending.RemoveAll(op => op.World == DeathChestPlayer.WorldId && op.Txn <= txn);
+					break;
+				}
+				case MessageType.ChestList: {
+					int start = reader.ReadInt32();
+					reader.ReadBoolean();
+					int n = reader.ReadUInt16();
+					if (start == 0)
+						ChestWorld.Chests.Clear();
+					for (int i = 0; i < n; i++)
+						AddOrReplace(DeathChestData.ReadHeader(reader));
+					break;
+				}
+				case MessageType.ChestAdded:
+					AddOrReplace(DeathChestData.ReadHeader(reader));
+					break;
+				case MessageType.ChestRemoved: {
+					var chest = ChestWorld.Find(new Guid(reader.ReadBytes(16)));
+					if (chest != null)
+						ChestWorld.Chests.Remove(chest);
 					break;
 				}
 				case MessageType.OpDone:

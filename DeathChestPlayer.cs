@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using DeathChest.NPCs;
 using DeathChest.UI;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -35,7 +34,7 @@ namespace DeathChest
 		public int Outstanding;
 
 		// On a client: the chest this player has open. On the server: the chest the server let this player open.
-		public int OpenChestId = -1;
+		public Guid OpenChestId;
 
 		public static Guid WorldId => Main.ActiveWorldFileData.UniqueId;
 
@@ -90,12 +89,14 @@ namespace DeathChest
 			PacketHandler.SendOp(op);
 		}
 
-		// Items arriving from a chest. Mouse first if asked, then the inventory; what doesn't fit drops at the player
-		// like any vanilla overflow, never vanishes.
-		public void Receive(IEnumerable<Item> items, bool toMouse)
+		// Items arriving from a chest. Their equipment slot first if one is given (Try to Equip), else the mouse if asked,
+		// then the inventory; what doesn't fit drops at the player like any vanilla overflow, never vanishes.
+		public void Receive(IEnumerable<Item> items, bool toMouse, string equipTo = null)
 		{
 			foreach (var item in items) {
 				if (item.IsAir)
+					continue;
+				if (equipTo != null && Equipment.TryPlace(Player, equipTo, item))
 					continue;
 				if (toMouse) {
 					if (Main.mouseItem.IsAir) {
@@ -116,22 +117,33 @@ namespace DeathChest
 		}
 
 		// Like vanilla Chest.UsingChest: the player who has this chest open, or -1.
-		public static int UsingChest(int npcId)
+		public static int UsingChest(Guid chestId)
 		{
 			for (int i = 0; i < Main.maxPlayers; i++)
-				if (Main.player[i].active && Main.player[i].GetModPlayer<DeathChestPlayer>().OpenChestId == npcId)
+				if (Main.player[i].active && Main.player[i].GetModPlayer<DeathChestPlayer>().OpenChestId == chestId)
 					return i;
 			return -1;
 		}
 
 		// The chest this player has open, or null once it is gone.
-		public DeathChestNPC OpenChest =>
-			OpenChestId >= 0 && Main.npc[OpenChestId].active ? Main.npc[OpenChestId].ModNPC as DeathChestNPC : null;
+		public DeathChestData OpenChest => ChestWorld.Find(OpenChestId);
 
-		public void Open(int npcId)
+		// Right-clicked a chest: release the one that's open now, then open this one (multiplayer: ask the server).
+		public void RequestOpen(DeathChestData chest)
 		{
-			OpenChestId = npcId;
-			Player.SetTalkNPC(-1); // vanilla set it before calling GetChat; the chest is not a conversation
+			if (OpenChestId == chest.Id)
+				return;
+			Close();
+			if (Main.netMode == NetmodeID.MultiplayerClient)
+				PacketHandler.SendOpenRequest(chest.Id);
+			else if (chest.CanAccess(Player))
+				Open(chest.Id);
+		}
+
+		public void Open(Guid chestId)
+		{
+			OpenChestId = chestId;
+			Player.SetTalkNPC(-1);
 			Player.chest = -1;
 			Main.npcChatText = "";
 			Main.playerInventory = true;
@@ -141,9 +153,9 @@ namespace DeathChest
 
 		public void Close()
 		{
-			if (OpenChestId < 0)
+			if (OpenChestId == Guid.Empty)
 				return;
-			OpenChestId = -1;
+			OpenChestId = Guid.Empty;
 			if (Main.netMode == NetmodeID.MultiplayerClient)
 				PacketHandler.SendClose();
 			ModContent.GetInstance<UISystem>().HideUI();
@@ -154,18 +166,18 @@ namespace DeathChest
 		// or the chest is emptied.
 		public override void PostUpdate()
 		{
-			if (Player.whoAmI != Main.myPlayer || OpenChestId < 0)
+			if (Player.whoAmI != Main.myPlayer || OpenChestId == Guid.Empty)
 				return;
 			var chest = OpenChest;
 			if (Player.dead || chest == null || chest.IsEmpty || !chest.CanAccess(Player) || !Main.playerInventory || Player.chest != -1 || Player.talkNPC != -1 ||
-				Player.Distance(chest.NPC.Center) > Range)
+				Player.Distance(chest.Center) > Range)
 				Close();
 		}
 
 		// Server: a player who leaves no longer holds a chest, and whoever joins in their slot doesn't inherit it.
 		public override void PlayerDisconnect()
 		{
-			OpenChestId = -1;
+			OpenChestId = Guid.Empty;
 			if (Main.netMode == NetmodeID.Server)
 				PacketHandler.PlayerLeft(Player.whoAmI);
 		}
@@ -184,14 +196,17 @@ namespace DeathChest
 		public long Txn;
 		public Vector2 Bottom;
 		public List<Item> Items = new();
+		public List<string> Origins = new();
 
 		public TagCompound Save() => new() {
 			["world"] = World.ToString(), ["txn"] = Txn, ["x"] = Bottom.X, ["y"] = Bottom.Y, ["items"] = Items,
+			["origins"] = Origins.Select(o => o ?? "").ToList(),
 		};
 
 		public static PendingOp Load(TagCompound t) => new() {
 			World = Guid.Parse(t.GetString("world")), Txn = t.GetLong("txn"),
 			Bottom = new Vector2(t.GetFloat("x"), t.GetFloat("y")), Items = t.GetList<Item>("items").ToList(),
+			Origins = t.GetList<string>("origins").Select(o => o == "" ? null : o).ToList(),
 		};
 	}
 }

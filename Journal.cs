@@ -16,6 +16,7 @@ namespace DeathChest
 		{
 			public long Txn;
 			public bool ToMouse;
+			public string EquipTo; // equipment slot to put it back into (Try to Equip), or null
 			public List<Item> Items;
 		}
 
@@ -43,7 +44,7 @@ namespace DeathChest
 				["id"] = kv.Key.ToString(),
 				["lastTxn"] = kv.Value.LastTxn,
 				["nextGrant"] = kv.Value.NextGrant,
-				["grants"] = kv.Value.Grants.Select(g => new TagCompound { ["txn"] = g.Txn, ["toMouse"] = g.ToMouse, ["items"] = g.Items }).ToList(),
+				["grants"] = kv.Value.Grants.Select(g => new TagCompound { ["txn"] = g.Txn, ["toMouse"] = g.ToMouse, ["equipTo"] = g.EquipTo ?? "", ["items"] = g.Items }).ToList(),
 			}).ToList();
 		}
 
@@ -54,7 +55,7 @@ namespace DeathChest
 				_records[Guid.Parse(t.GetString("id"))] = new Record {
 					LastTxn = t.GetLong("lastTxn"),
 					NextGrant = Math.Max(1, t.GetLong("nextGrant")),
-					Grants = t.GetList<TagCompound>("grants").Select(g => new Grant { Txn = g.GetLong("txn"), ToMouse = g.GetBool("toMouse"), Items = g.GetList<Item>("items").ToList() }).ToList(),
+					Grants = t.GetList<TagCompound>("grants").Select(g => new Grant { Txn = g.GetLong("txn"), ToMouse = g.GetBool("toMouse"), EquipTo = g.GetString("equipTo") is { Length: > 0 } e ? e : null, Items = g.GetList<Item>("items").ToList() }).ToList(),
 				};
 			}
 		}

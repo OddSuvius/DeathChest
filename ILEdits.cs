@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using DeathChest.NPCs;
 using MonoMod.Cil;
 using Terraria;
 using Terraria.DataStructures;
@@ -15,6 +14,7 @@ namespace DeathChest
 	{
 		// Set only while Player.KillMe runs for the local player.
 		private static List<Item> _collected;
+		private static List<string> _origins; // where each collected item was equipped (Equipment), or null
 		private static Player _dying;
 
 		public static void ApplyILEdits()
@@ -54,6 +54,7 @@ namespace DeathChest
 				return;
 			}
 			var items = _collected = new List<Item>();
+			var origins = _origins = new List<string>();
 			_dying = self;
 			bool wasDead = self.dead;
 			// The cursor item reaches DropItems only through inventory[58], which vanilla refreshes from Main.mouseItem once
@@ -66,10 +67,11 @@ namespace DeathChest
 			}
 			finally {
 				_collected = null;
+				_origins = null;
 				_dying = null;
 			}
 			if (items.Count > 0)
-				DeathChestNPC.SpawnFor(self, items);
+				ChestWorld.SpawnFor(self, items, origins);
 		}
 
 		// Vanilla's drop path (inventory, armor, dyes, equipment, loadouts, ModAccessorySlot slots): never spawn the item.
@@ -79,8 +81,10 @@ namespace DeathChest
 				orig(self, source, theItem);
 				return;
 			}
-			if (theItem.stack > 0)
+			if (theItem.stack > 0) {
 				_collected.Add(theItem.Clone());
+				_origins.Add(Equipment.FindOrigin(self, theItem));
+			}
 			theItem.TurnToAir(fullReset: true);
 		}
 
@@ -92,6 +96,7 @@ namespace DeathChest
 			int i = orig(source, X, Y, Width, Height, itemToClone, Type, Stack, noBroadcast, pfix, noGrabDelay, reverseLookup);
 			if (_collected != null && source is EntitySource_Death death && death.Entity == _dying && i >= 0 && i < Main.item.Length && !Main.item[i].IsAir) {
 				_collected.Add(Main.item[i].Clone());
+				_origins.Add(null);
 				Main.item[i].TurnToAir(fullReset: true);
 				Main.item[i].active = false;
 			}
