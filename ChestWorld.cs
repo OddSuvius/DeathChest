@@ -81,7 +81,7 @@ namespace DeathChest
 	{
 		public static readonly List<DeathChestData> Chests = new();
 
-		private static Asset<Texture2D> _texture;
+		private static Asset<Texture2D> _texture, _highlight;
 
 		public static DeathChestData Find(Guid id) => id == Guid.Empty ? null : Chests.Find(c => c.Id == id);
 
@@ -89,6 +89,7 @@ namespace DeathChest
 		{
 			if (!Main.dedServ)
 				_texture = ModContent.Request<Texture2D>("DeathChest/Assets/DeathChest");
+				_highlight = ModContent.Request<Texture2D>("DeathChest/Assets/DeathChest_Highlight"); // the outer outline only
 		}
 
 		public override void OnWorldUnload() => Chests.Clear();
@@ -102,12 +103,13 @@ namespace DeathChest
 		}
 
 		// Local player died: spawn here (single player) or hand the items to the server.
-		public static void SpawnFor(Player player, List<Item> items, List<string> origins)
+		public static void SpawnFor(Player player, List<Item> items, List<string> origins, Vector2? at = null)
 		{
+			Vector2 bottom = at ?? player.Bottom;
 			if (Main.netMode == NetmodeID.MultiplayerClient)
-				player.GetModPlayer<DeathChestPlayer>().HandOver(new PendingOp { Bottom = player.Bottom, Items = items, Origins = origins });
+				player.GetModPlayer<DeathChestPlayer>().HandOver(new PendingOp { Bottom = bottom, Items = items, Origins = origins });
 			else
-				Spawn(player.Bottom, items, origins, player);
+				Spawn(bottom, items, origins, player);
 		}
 
 		// Single player or server.
@@ -160,8 +162,16 @@ namespace DeathChest
 					begun = true;
 				}
 				var box = chest.Hitbox;
+				var pos = new Vector2(box.X, box.Y) - Main.screenPosition;
 				Color light = Lighting.GetColor((int)(chest.Center.X / 16f), (int)(chest.Center.Y / 16f));
-				Main.spriteBatch.Draw(_texture.Value, new Vector2(box.X, box.Y) - Main.screenPosition, frame, light);
+				Main.spriteBatch.Draw(_texture.Value, pos, frame, light);
+				// selected (under the mouse in range, or the smart cursor / gamepad target): vanilla's selection outline,
+				// yellow and as bright as the spot it's in (Colors.GetSelectionGlowColor, as for a selected chest tile)
+				if (chest == ChestInteraction.Hovered || chest == ChestInteraction.SmartTarget) {
+					int average = (light.R + light.G + light.B) / 3;
+					if (average > 10)
+						Main.spriteBatch.Draw(_highlight.Value, pos, frame, Colors.GetSelectionGlowColor(true, average));
+				}
 			}
 			if (begun)
 				Main.spriteBatch.End();

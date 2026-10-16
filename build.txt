@@ -1,4 +1,5 @@
 displayName = Death Chest Suvius'
 author = Suvius
-version = 0.1
+version = 1.0
+homepage = https://github.com/OddSuvius/DeathChest
 buildIgnore = README.md

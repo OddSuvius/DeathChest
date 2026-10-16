@@ -162,6 +162,20 @@ namespace DeathChest
 			SoundEngine.PlaySound(SoundID.MenuClose);
 		}
 
+		// Smart cursor / gamepad: the interact button (right click on a mouse) opens the targeted chest. Runs right after
+		// vanilla reads the controls and before it acts on them; the press is used up, so the held item isn't used too.
+		public override void SetControls()
+		{
+			if (Player.whoAmI != Main.myPlayer)
+				return;
+			ChestInteraction.UpdateSmartTarget(Player);
+			if (ChestInteraction.SmartTarget != null && Terraria.GameInput.PlayerInput.Triggers.JustPressed.MouseRight && !Player.mouseInterface && !Main.drawingPlayerChat && !Main.editSign) {
+				Player.controlUseTile = false;
+				Player.releaseUseTile = false;
+				RequestOpen(ChestInteraction.SmartTarget);
+			}
+		}
+
 		// Closes the chest when the player dies, walks away, closes the inventory, opens something else, loses access,
 		// or the chest is emptied.
 		public override void PostUpdate()

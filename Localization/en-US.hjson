@@ -3,11 +3,19 @@ Mods: {
 		Configs: {
 			Config: {
 				DisplayName: Config
-				Headers.Options: Options
+				Headers.DeathChests:
+					'''
+					[c/FFD54F:In multiplayer, only the host can change these settings.]
+					[i:48] Death Chests
+					'''
 
 				PrivateDeathChests: {
 					Label: Private Death Chests
-					Tooltip: Only the character who died can see and open their Death Chest
+					Tooltip:
+						'''
+						Only the character who died can see and open their Death Chest.
+						Turn off to let everyone see and open every Death Chest, including the chests of characters that no longer exist.
+						'''
 				}
 			}
 		}

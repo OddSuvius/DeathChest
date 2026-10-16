@@ -42,6 +42,12 @@ namespace DeathChest.UI
 
 		public override void ModifyInterfaceLayers(List<GameInterfaceLayer> layers)
 		{
+			int icon = layers.FindIndex(layer => layer.Name == "Vanilla: Interact Item Icon");
+			if (icon != -1)
+				layers.Insert(icon + 1, new LegacyGameInterfaceLayer("DeathChest: Cursor Icon", () => {
+					ChestInteraction.DrawCursorIcon();
+					return true;
+				}, InterfaceScaleType.UI));
 			int index = layers.FindIndex(layer => layer.Name == "Vanilla: Inventory");
 			if (index == -1)
 				return;

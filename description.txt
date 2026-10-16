@@ -1,1 +1,17 @@
-Modify this file with a description of your mod.
+[b]Death Chest Suvius'[/b]! Die, and everything you dropped waits for you in a chest right where you fell. No more gear scattered across a cave, melted in lava or lost in the ocean. Every character gets one: Classic and Journey characters drop like Mediumcore, so there's always a Death Chest to come back to. [b]Die, return, re-equip![/b]
+
+[b]Features:[/b]
+[list]
+[*]Every death makes a Death Chest with everything the death dropped: inventory, armor, accessories, vanity, dyes, pets, mounts and hooks, every loadout, and modded accessory slots
+[*][b]Try to Equip[/b] puts your whole setup back where it was, slot for slot
+[*][b]Loot All[/b], or take items one by one; chests of any size scroll
+[*]Hover a chest to see whose it is and when they died; chests show on the map
+[*]Private by default: only the character who died can see and open their chest. The host can make every chest public
+[*]Smart cursor and gamepad support
+[*]Multiplayer safe: one player per chest, and nothing is lost or duplicated even if your connection drops mid-loot
+[*]Doesn't touch what vanilla keeps on death (the starter kit) or what other mods keep to themselves
+[/list]
+
+[b]Good to know:[/b] a Hardcore character's chest is private like any other. To reach it after that character is gone, the host turns Private Death Chests off in the mod's config.
+
+Want to support me? [url=https://ko-fi.com/suvius][img]https://suvius.lol/assets/images/kofi.png[/img][/url]
