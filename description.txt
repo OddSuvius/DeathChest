@@ -7,9 +7,7 @@
 [*][b]Loot All[/b], or take items one by one; chests of any size scroll
 [*]Hover a chest to see whose it is and when they died; chests show on the map
 [*]Private by default: only the character who died can see and open their chest. The host can make every chest public
-[*]Smart cursor and gamepad support
 [*]Multiplayer safe: one player per chest, and nothing is lost or duplicated even if your connection drops mid-loot
-[*]Doesn't touch what vanilla keeps on death (the starter kit) or what other mods keep to themselves
 [/list]
 
 [b]Good to know:[/b] a Hardcore character's chest is private like any other. To reach it after that character is gone, the host turns Private Death Chests off in the mod's config.
