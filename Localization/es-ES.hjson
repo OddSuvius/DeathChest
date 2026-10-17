@@ -1,0 +1,31 @@
+Mods: {
+	DeathChest: {
+		Configs: {
+			Config: {
+				DisplayName: Configuración
+				Headers.DeathChests:
+					'''
+					[c/FFD54F:En multijugador, solo el anfitrión puede cambiar estos ajustes.]
+					[i:48] Cofres de muerte
+					'''
+
+				PrivateDeathChests: {
+					Label: Cofres de muerte privados
+					Tooltip:
+						'''
+						Solo el personaje que murió puede ver y abrir su cofre de muerte.
+						Desactívalo para que todos puedan ver y abrir cualquier cofre de muerte, incluidos los de personajes que ya no existen.
+						'''
+				}
+			}
+		}
+
+		UI: {
+			Title: Cofre de muerte de {0}
+			Hover: Cofre de muerte de {0} (murió el {1})
+			Died: Murió el {0}
+			LootAll: Coger todo
+			Equip: Equipar
+		}
+	}
+}

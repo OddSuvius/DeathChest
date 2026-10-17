@@ -1,8 +1,8 @@
-[b]Death Chest Suvius'[/b]! Die, and everything you dropped waits for you in a chest right where you fell. No more gear scattered across a cave, melted in lava or lost in the ocean. Every character gets one: Classic and Journey characters drop like Mediumcore, so there's always a Death Chest to come back to. [b]Die, return, re-equip![/b]
+[b]Death Chest Suvius'[/b]! When you die, everything you drop goes into a chest right where you fell, instead of scattering across a cave or burning up in lava. Classic and Journey characters drop their items like Mediumcore ones, so every character gets a Death Chest. [b]Die, return, re-equip![/b]
 
 [b]Features:[/b]
 [list]
-[*]Every death makes a Death Chest with everything the death dropped: inventory, armor, accessories, vanity, dyes, pets, mounts and hooks, every loadout, and modded accessory slots
+[*]Every death makes a Death Chest with everything you dropped: inventory, armor, accessories, vanity, dyes, pets, mounts and hooks, every loadout, and modded accessory slots
 [*][b]Try to Equip[/b] puts your whole setup back where it was, slot for slot
 [*][b]Loot All[/b], or take items one by one; chests of any size scroll
 [*]Hover a chest to see whose it is and when they died; chests show on the map

@@ -1,0 +1,31 @@
+Mods: {
+	DeathChest: {
+		Configs: {
+			Config: {
+				DisplayName: Configuração
+				Headers.DeathChests:
+					'''
+					[c/FFD54F:No multijogador, só o host pode mudar estas configurações.]
+					[i:48] Baús da Morte
+					'''
+
+				PrivateDeathChests: {
+					Label: Baús da Morte privados
+					Tooltip:
+						'''
+						Só o personagem que morreu pode ver e abrir o próprio Baú da Morte.
+						Desative para que todos possam ver e abrir qualquer Baú da Morte, incluindo os de personagens que não existem mais.
+						'''
+				}
+			}
+		}
+
+		UI: {
+			Title: Baú da Morte de {0}
+			Hover: Baú da Morte de {0} (morreu em {1})
+			Died: Morreu em {0}
+			LootAll: Pegar Tudo
+			Equip: Equipar
+		}
+	}
+}

@@ -1,0 +1,31 @@
+Mods: {
+	DeathChest: {
+		Configs: {
+			Config: {
+				DisplayName: Configurazione
+				Headers.DeathChests:
+					'''
+					[c/FFD54F:In multigiocatore, solo l'host può modificare queste impostazioni.]
+					[i:48] Casse della morte
+					'''
+
+				PrivateDeathChests: {
+					Label: Casse della morte private
+					Tooltip:
+						'''
+						Solo il personaggio morto può vedere e aprire la propria cassa della morte.
+						Disattivala per permettere a tutti di vedere e aprire ogni cassa della morte, comprese quelle dei personaggi che non esistono più.
+						'''
+				}
+			}
+		}
+
+		UI: {
+			Title: Cassa della morte di {0}
+			Hover: Cassa della morte di {0} (morte: {1})
+			Died: Morte: {0}
+			LootAll: Saccheggia tutto
+			Equip: Equipaggia
+		}
+	}
+}

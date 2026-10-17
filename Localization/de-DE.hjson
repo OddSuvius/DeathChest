@@ -1,0 +1,31 @@
+Mods: {
+	DeathChest: {
+		Configs: {
+			Config: {
+				DisplayName: Einstellungen
+				Headers.DeathChests:
+					'''
+					[c/FFD54F:Im Mehrspielermodus kann nur der Host diese Einstellungen ändern.]
+					[i:48] Todestruhen
+					'''
+
+				PrivateDeathChests: {
+					Label: Private Todestruhen
+					Tooltip:
+						'''
+						Nur der gestorbene Charakter kann seine Todestruhe sehen und öffnen.
+						Schalte es aus, damit alle jede Todestruhe sehen und öffnen können, auch die von Charakteren, die es nicht mehr gibt.
+						'''
+				}
+			}
+		}
+
+		UI: {
+			Title: Todestruhe von {0}
+			Hover: Todestruhe von {0} (gestorben {1})
+			Died: Gestorben: {0}
+			LootAll: Alle einsammeln
+			Equip: Ausrüsten
+		}
+	}
+}

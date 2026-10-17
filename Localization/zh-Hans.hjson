@@ -1,0 +1,31 @@
+Mods: {
+	DeathChest: {
+		Configs: {
+			Config: {
+				DisplayName: 配置
+				Headers.DeathChests:
+					'''
+					[c/FFD54F:多人模式中，只有房主可以更改这些设置。]
+					[i:48] 死亡宝箱
+					'''
+
+				PrivateDeathChests: {
+					Label: 私有死亡宝箱
+					Tooltip:
+						'''
+						只有死亡的角色本人才能看到并打开自己的死亡宝箱。
+						关闭后，所有人都能看到并打开每个死亡宝箱，包括已不存在角色的宝箱。
+						'''
+				}
+			}
+		}
+
+		UI: {
+			Title: "{0}的死亡宝箱"
+			Hover: "{0}的死亡宝箱（死于{1}）"
+			Died: 死于{0}
+			LootAll: 强夺全部
+			Equip: 尝试装备
+		}
+	}
+}

@@ -1,0 +1,31 @@
+Mods: {
+	DeathChest: {
+		Configs: {
+			Config: {
+				DisplayName: Konfiguracja
+				Headers.DeathChests:
+					'''
+					[c/FFD54F:W trybie wieloosobowym tylko host może zmieniać te ustawienia.]
+					[i:48] Skrzynie śmierci
+					'''
+
+				PrivateDeathChests: {
+					Label: Prywatne skrzynie śmierci
+					Tooltip:
+						'''
+						Tylko postać, która zginęła, może widzieć i otwierać swoją skrzynię śmierci.
+						Wyłącz, aby każdy mógł widzieć i otwierać każdą skrzynię śmierci, także postaci, które już nie istnieją.
+						'''
+				}
+			}
+		}
+
+		UI: {
+			Title: Skrzynia śmierci gracza {0}
+			Hover: Skrzynia śmierci gracza {0} (śmierć: {1})
+			Died: Śmierć: {0}
+			LootAll: Weź wszystko
+			Equip: Załóż
+		}
+	}
+}

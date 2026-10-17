@@ -1,0 +1,31 @@
+Mods: {
+	DeathChest: {
+		Configs: {
+			Config: {
+				DisplayName: Configuration
+				Headers.DeathChests:
+					'''
+					[c/FFD54F:En multijoueur, seul l'hôte peut modifier ces paramètres.]
+					[i:48] Coffres de mort
+					'''
+
+				PrivateDeathChests: {
+					Label: Coffres de mort privés
+					Tooltip:
+						'''
+						Seul le personnage mort peut voir et ouvrir son coffre de mort.
+						Désactivez cette option pour que tout le monde puisse voir et ouvrir tous les coffres de mort, y compris ceux des personnages qui n'existent plus.
+						'''
+				}
+			}
+		}
+
+		UI: {
+			Title: Coffre de mort de {0}
+			Hover: Coffre de mort de {0} (décès : {1})
+			Died: Décès : {0}
+			LootAll: Tout prendre
+			Equip: Équiper
+		}
+	}
+}
