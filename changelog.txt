@@ -1,7 +1,2 @@
-1.0
-First release.
-- Every death makes a Death Chest at the death spot with everything the death dropped, in every difficulty.
-- Try to Equip puts the setup back slot for slot; Loot All; scrolling chests.
-- Private chests by default, host-only server setting.
-- Map icons; hover shows the owner and time of death.
-- Multiplayer: server-owned contents, one player per chest, safe against dropped connections.
+1.0.1
+- Translated into German, French, Italian, Spanish, Polish, Brazilian Portuguese, Russian and Simplified Chinese.
